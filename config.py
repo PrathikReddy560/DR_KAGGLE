@@ -10,10 +10,13 @@ if ON_KAGGLE:
     # NOTE: these folder names must match the exact slugs Kaggle mounts your
     # datasets under — check the sidebar of your Kaggle notebook (or
     # `!ls /kaggle/input`) and correct these if they don't match.
-    APTOS_DIR = "/kaggle/input/aptos2019-blindness-detection"
-    IDRID_DIR = "/kaggle/input/idrid-dataset"
-    ODIR_DIR = "/kaggle/input/odir5k-normal"
-    MESSIDOR_DIR = "/kaggle/input/messidor2"
+    APTOS_DIR = "/kaggle/input/datasets/mariaherrerot/aptos2019"
+    IDRID_DIR = "/kaggle/input/datasets/lakshmiprathik/idrid-dr-dataset"
+    ODIR_DIR = "/kaggle/input/datasets/lakshmiprathik/odir-5k"
+    # confirmed via actual notebook output — NOT the flat /kaggle/input/<slug>
+    # pattern the other three assume. Verify whether APTOS/IDRiD/ODIR follow
+    # this same "datasets/<owner>/<slug>" nesting before trusting those three.
+    MESSIDOR_DIR = "/kaggle/input/datasets/lakshmiprathik/messidor2-dr-dataset"
     OUTPUT_DIR = "/kaggle/working"
 else:
     # Local dev machine — NOT used for real training (4GB GTX 1650 OOMs).
