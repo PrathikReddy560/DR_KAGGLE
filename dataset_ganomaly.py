@@ -1,5 +1,4 @@
 import os
-import glob
 import pandas as pd
 from PIL import Image
 from torch.utils.data import Dataset
@@ -7,12 +6,13 @@ import torchvision.transforms as T
 
 
 class HealthyRetinaDataset(Dataset):
-    """Combines APTOS-2019 Grade-0 (No DR) images with ODIR-5K normal
-    images. GANomaly trains EXCLUSIVELY on this healthy pool — no
-    DR-positive image should ever appear here, or the gatekeeper stops
-    being a gatekeeper."""
+    """Verified APTOS-2019 Grade-0 (No DR) images only.
 
-    def __init__(self, aptos_dir, odir_dir, img_size=128):
+    Raw ODIR folders are intentionally not scanned: they contain multiple
+    pathologies, so adding every image would contaminate healthy-only training.
+    """
+
+    def __init__(self, aptos_dir, img_size=128):
         self.paths = []
 
         # --- APTOS: keep only diagnosis == 0 (No DR) ---
@@ -32,14 +32,10 @@ class HealthyRetinaDataset(Dataset):
             grade0_ids = df[df["diagnosis"] == 0]["id_code"].tolist()
             self.paths += [os.path.join(img_dir, f"{i}.png") for i in grade0_ids]
 
-        # --- ODIR: assumed pre-filtered to normal-only images ---
-        for ext in ("*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG"):
-            self.paths += glob.glob(os.path.join(odir_dir, "**", ext), recursive=True)
-
         self.paths = [p for p in self.paths if os.path.exists(p)]
         assert len(self.paths) > 0, (
-            "No healthy images found. Check APTOS_DIR/ODIR_DIR in config.py "
-            "match your actual Kaggle dataset folder names."
+            "No APTOS Grade-0 images found. Check APTOS_DIR and confirm it "
+            "contains train.csv plus train_images/."
         )
 
         # Normalize to [-1, 1] to match the Decoder's Tanh output range
@@ -59,7 +55,7 @@ class HealthyRetinaDataset(Dataset):
 
 if __name__ == "__main__":
     import sys
-    ds = HealthyRetinaDataset(sys.argv[1], sys.argv[2], img_size=128)
+    ds = HealthyRetinaDataset(sys.argv[1], img_size=128)
     print(f"Found {len(ds)} healthy images")
     sample = ds[0]
     print("Sample shape:", sample.shape, "range:", sample.min().item(), sample.max().item())

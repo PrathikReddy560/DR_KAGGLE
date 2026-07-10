@@ -6,17 +6,17 @@ import os
 # ---------------------------------------------------------------------------
 ON_KAGGLE = os.environ.get("KAGGLE_KERNEL_RUN_TYPE") is not None
 
+
+def kaggle_path(env_name, default):
+    """Allow notebook-specific Kaggle mounts without changing source code."""
+    return os.environ.get(env_name, default)
+
 if ON_KAGGLE:
-    # NOTE: these folder names must match the exact slugs Kaggle mounts your
-    # datasets under — check the sidebar of your Kaggle notebook (or
-    # `!ls /kaggle/input`) and correct these if they don't match.
-    APTOS_DIR = "/kaggle/input/datasets/mariaherrerot/aptos2019"
-    IDRID_DIR = "/kaggle/input/datasets/lakshmiprathik/idrid-dr-dataset"
-    ODIR_DIR = "/kaggle/input/datasets/lakshmiprathik/odir-5k"
-    # confirmed via actual notebook output — NOT the flat /kaggle/input/<slug>
-    # pattern the other three assume. Verify whether APTOS/IDRiD/ODIR follow
-    # this same "datasets/<owner>/<slug>" nesting before trusting those three.
-    MESSIDOR_DIR = "/kaggle/input/datasets/lakshmiprathik/messidor2-dr-dataset"
+    # Override APTOS_DIR in the first notebook cell if its mounted folder has
+    # another name, e.g. /kaggle/input/aptos2019-blindness-detection.
+    APTOS_DIR = kaggle_path(
+        "APTOS_DIR", "/kaggle/input/aptos2019-blindness-detection"
+    )
     OUTPUT_DIR = "/kaggle/working"
 else:
     # Local dev machine — NOT used for real training (4GB GTX 1650 OOMs).
@@ -24,9 +24,6 @@ else:
     # on your laptop before pushing to GitHub.
     ROOT = os.path.dirname(os.path.abspath(__file__))
     APTOS_DIR = os.path.join(ROOT, "sample_data", "aptos2019")
-    IDRID_DIR = os.path.join(ROOT, "sample_data", "idrid")
-    ODIR_DIR = os.path.join(ROOT, "sample_data", "odir5k")
-    MESSIDOR_DIR = os.path.join(ROOT, "sample_data", "messidor2")
     OUTPUT_DIR = os.path.join(ROOT, "outputs")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -43,6 +40,7 @@ class GANomalyConfig:
     LR = 2e-4
     BETA1, BETA2 = 0.5, 0.999
     VAL_SPLIT = 0.15          # held-out healthy images for checkpointing
+    TEST_SPLIT = 0.15         # untouched until final evaluation
     W_ADV = 1.0               # adversarial (feature-matching) weight
     W_CON = 50.0              # contextual (SSIM) weight — GANomaly paper default
     W_ENC = 1.0               # latent/encoder weight
