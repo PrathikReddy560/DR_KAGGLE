@@ -16,6 +16,15 @@ torch.manual_seed(SEED)
 np.random.seed(SEED)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 if device.type == "cuda":
+    capability = torch.cuda.get_device_capability(0)
+    required_arch = f"sm_{capability[0]}{capability[1]}"
+    if required_arch not in torch.cuda.get_arch_list():
+        raise RuntimeError(
+            f"This PyTorch build has no kernel for {required_arch}. "
+            "Kaggle P100 requires a build that includes sm_60; install the "
+            "pinned PyTorch 2.6 CUDA 12.6 packages from requirements.txt, "
+            "then restart the notebook session."
+        )
     # Inputs are always 128x128, so cuDNN can reuse its fastest kernel choice.
     torch.backends.cudnn.benchmark = True
 print(f"Running on Kaggle: {ON_KAGGLE} | Device: {device}")
