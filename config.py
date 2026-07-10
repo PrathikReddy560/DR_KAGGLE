@@ -12,10 +12,10 @@ def kaggle_path(env_name, default):
     return os.environ.get(env_name, default)
 
 if ON_KAGGLE:
-    # Override APTOS_DIR in the first notebook cell if its mounted folder has
-    # another name, e.g. /kaggle/input/aptos2019-blindness-detection.
+    # This is the mounted path for the APTOS copy used by this project.
+    # Override APTOS_DIR in a notebook cell if you attach another copy.
     APTOS_DIR = kaggle_path(
-        "APTOS_DIR", "/kaggle/input/aptos2019-blindness-detection"
+        "APTOS_DIR", "/kaggle/input/datasets/mariaherrerot/aptos2019"
     )
     OUTPUT_DIR = "/kaggle/working"
 else:
