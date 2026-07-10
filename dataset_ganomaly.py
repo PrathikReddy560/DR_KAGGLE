@@ -18,14 +18,23 @@ class HealthyRetinaDataset(Dataset):
         # --- APTOS: keep only diagnosis == 0 (No DR) ---
         csv_path = os.path.join(aptos_dir, "train.csv")
         img_dir = os.path.join(aptos_dir, "train_images")
-        if os.path.exists(csv_path):
+        
+        if not os.path.exists(csv_path):
+            # Fallback: search recursively for train.csv in aptos_dir
+            for root, dirs, files in os.walk(aptos_dir):
+                if "train.csv" in files:
+                    csv_path = os.path.join(root, "train.csv")
+                    img_dir = os.path.join(root, "train_images")
+                    break
+
+        if os.path.exists(csv_path) and os.path.exists(img_dir):
             df = pd.read_csv(csv_path)
             grade0_ids = df[df["diagnosis"] == 0]["id_code"].tolist()
             self.paths += [os.path.join(img_dir, f"{i}.png") for i in grade0_ids]
 
         # --- ODIR: assumed pre-filtered to normal-only images ---
-        for ext in ("*.jpg", "*.jpeg", "*.png"):
-            self.paths += glob.glob(os.path.join(odir_dir, ext))
+        for ext in ("*.jpg", "*.jpeg", "*.png", "*.JPG", "*.JPEG", "*.PNG"):
+            self.paths += glob.glob(os.path.join(odir_dir, "**", ext), recursive=True)
 
         self.paths = [p for p in self.paths if os.path.exists(p)]
         assert len(self.paths) > 0, (
