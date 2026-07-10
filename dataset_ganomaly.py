@@ -63,3 +63,43 @@ if __name__ == "__main__":
     print(f"Found {len(ds)} healthy images")
     sample = ds[0]
     print("Sample shape:", sample.shape, "range:", sample.min().item(), sample.max().item())
+
+
+class AnomalyRetinaDataset(Dataset):
+    """Loads APTOS images with DR (diagnosis > 0) to serve as the positive 
+    (anomalous) class for AUC evaluation."""
+
+    def __init__(self, aptos_dir, img_size=128):
+        self.paths = []
+
+        csv_path = os.path.join(aptos_dir, "train.csv")
+        img_dir = os.path.join(aptos_dir, "train_images")
+        
+        if not os.path.exists(csv_path):
+            # Fallback: search recursively for train.csv in aptos_dir
+            for root, dirs, files in os.walk(aptos_dir):
+                if "train.csv" in files:
+                    csv_path = os.path.join(root, "train.csv")
+                    img_dir = os.path.join(root, "train_images")
+                    break
+
+        if os.path.exists(csv_path) and os.path.exists(img_dir):
+            df = pd.read_csv(csv_path)
+            # diagnosis > 0 means DR is present
+            dr_ids = df[df["diagnosis"] > 0]["id_code"].tolist()
+            self.paths = [os.path.join(img_dir, f"{i}.png") for i in dr_ids]
+
+        self.paths = [p for p in self.paths if os.path.exists(p)]
+
+        self.transform = T.Compose([
+            T.Resize((img_size, img_size)),
+            T.ToTensor(),
+            T.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+        ])
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        img = Image.open(self.paths[idx]).convert("RGB")
+        return self.transform(img)

@@ -1,9 +1,11 @@
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, ConcatDataset
 from torch.optim import Adam
+from sklearn.metrics import roc_auc_score
+import numpy as np
 
 from config import ON_KAGGLE, APTOS_DIR, ODIR_DIR, GANomalyConfig as C, SEED
-from dataset_ganomaly import HealthyRetinaDataset
+from dataset_ganomaly import HealthyRetinaDataset, AnomalyRetinaDataset
 from model_ganomaly import Generator, Discriminator
 from losses import contextual_loss, encoder_loss, adversarial_loss, gradient_penalty
 
@@ -27,7 +29,25 @@ print(f"Train: {n_train} | Val: {n_val}")
 
 train_loader = DataLoader(train_ds, batch_size=C.BATCH_SIZE, shuffle=True,
                            num_workers=2, drop_last=True)
-val_loader = DataLoader(val_ds, batch_size=C.BATCH_SIZE, shuffle=False)
+
+# ---- AUC Evaluation Setup ----
+# To evaluate clinical practicality (AUC), we need both positive (anomaly) and negative (healthy) samples.
+# Negative: our existing val_ds (held-out healthy)
+# Positive: AnomalyRetinaDataset (DR images)
+anomaly_ds = AnomalyRetinaDataset(APTOS_DIR, img_size=C.IMG_SIZE)
+
+# Balance evaluation set: use all val_ds, and randomly sample an equal number of anomaly images
+n_anomaly_eval = min(len(anomaly_ds), len(val_ds))
+if len(anomaly_ds) > n_anomaly_eval:
+    anomaly_ds, _ = random_split(
+        anomaly_ds, [n_anomaly_eval, len(anomaly_ds) - n_anomaly_eval],
+        generator=torch.Generator().manual_seed(SEED)
+    )
+
+eval_labels = [0] * len(val_ds) + [1] * len(anomaly_ds)
+eval_ds = ConcatDataset([val_ds, anomaly_ds])
+eval_loader = DataLoader(eval_ds, batch_size=C.BATCH_SIZE, shuffle=False)
+print(f"Eval: {len(eval_ds)} (Healthy: {len(val_ds)}, Anomaly: {len(anomaly_ds)})")
 
 # ---------------------------------------------------------------------------
 # Models
@@ -37,7 +57,7 @@ D = Discriminator().to(device)
 opt_G = Adam(G.parameters(), lr=C.LR, betas=(C.BETA1, C.BETA2))
 opt_D = Adam(D.parameters(), lr=C.LR, betas=(C.BETA1, C.BETA2))
 
-best_val_loss = float("inf")
+best_auc = 0.0
 
 for epoch in range(C.EPOCHS):
     G.train(); D.train()
@@ -76,28 +96,31 @@ for epoch in range(C.EPOCHS):
         running_g += g_loss.item()
         running_d += d_loss.item()
 
-    # ---- Validation: encoder loss on held-out healthy images ----
-    # (this — not a reconstruction metric — is what the report calls
-    # "validation loss", since it's the same quantity used as the
-    # anomaly score at inference time)
+    # ---- Validation: AUC on evaluation set ----
+    # Evaluate anomaly score (L2 distance between z and z_hat) on both healthy and DR images
     G.eval()
-    val_enc_loss = 0.0
+    anomaly_scores = []
+    
     with torch.no_grad():
-        for real in val_loader:
+        for real in eval_loader:
             real = real.to(device)
             _, z, z_hat = G(real)
-            val_enc_loss += encoder_loss(z, z_hat).item()
-    val_enc_loss /= len(val_loader)
+            # Anomaly score per image
+            scores = torch.mean((z - z_hat)**2, dim=[1, 2, 3])
+            anomaly_scores.extend(scores.cpu().numpy())
+            
+    # Calculate ROC-AUC score
+    auc_score = roc_auc_score(eval_labels, anomaly_scores)
 
     print(f"Epoch {epoch+1}/{C.EPOCHS} | "
           f"G: {running_g/len(train_loader):.4f} | "
           f"D: {running_d/len(train_loader):.4f} | "
-          f"Val Enc Loss: {val_enc_loss:.4f}")
+          f"AUC: {auc_score:.4f}")
 
-    if val_enc_loss < best_val_loss:
-        best_val_loss = val_enc_loss
+    if auc_score > best_auc:
+        best_auc = auc_score
         torch.save(G.state_dict(), C.CKPT_PATH)
-        print(f"  -> New best ({best_val_loss:.4f}), checkpoint saved.")
+        print(f"  -> New best AUC ({best_auc:.4f}), checkpoint saved.")
 
-print(f"Training complete. Best val encoder loss: {best_val_loss:.4f}")
+print(f"Training complete. Best AUC: {best_auc:.4f}")
 print(f"Best checkpoint: {C.CKPT_PATH}")

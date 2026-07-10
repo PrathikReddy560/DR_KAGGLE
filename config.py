@@ -39,7 +39,7 @@ class GANomalyConfig:
     IMG_SIZE = 128
     LATENT_DIM = 100
     BATCH_SIZE = 64
-    EPOCHS = 100
+    EPOCHS = 200
     LR = 2e-4
     BETA1, BETA2 = 0.5, 0.999
     VAL_SPLIT = 0.15          # held-out healthy images for checkpointing
