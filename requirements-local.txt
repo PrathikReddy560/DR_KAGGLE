@@ -1,0 +1,4 @@
+# Use only outside Kaggle. Kaggle users should install requirements.txt.
+torch>=2.1
+torchvision>=0.16
+-r requirements.txt

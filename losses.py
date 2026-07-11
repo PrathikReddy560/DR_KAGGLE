@@ -1,6 +1,34 @@
 import torch
 import torch.nn.functional as F
-from pytorch_msssim import ssim
+
+try:
+    from pytorch_msssim import ssim as _ssim
+except ImportError:
+    _ssim = None
+
+
+def _native_ssim(x, y, data_range):
+    """Differentiable SSIM fallback for offline Kaggle sessions.
+
+    ``pytorch-msssim`` is used when installed.  This implementation keeps
+    Stage 1 runnable without a network-only pip install while using the same
+    standard local-window SSIM formulation.
+    """
+    window_size = min(11, x.shape[-2], x.shape[-1])
+    if window_size % 2 == 0:
+        window_size -= 1
+    padding = window_size // 2
+    mu_x = F.avg_pool2d(x, window_size, stride=1, padding=padding)
+    mu_y = F.avg_pool2d(y, window_size, stride=1, padding=padding)
+    sigma_x = F.avg_pool2d(x * x, window_size, stride=1, padding=padding) - mu_x.square()
+    sigma_y = F.avg_pool2d(y * y, window_size, stride=1, padding=padding) - mu_y.square()
+    sigma_xy = F.avg_pool2d(x * y, window_size, stride=1, padding=padding) - mu_x * mu_y
+    c1 = (0.01 * data_range) ** 2
+    c2 = (0.03 * data_range) ** 2
+    ssim_map = ((2 * mu_x * mu_y + c1) * (2 * sigma_xy + c2)) / (
+        (mu_x.square() + mu_y.square() + c1) * (sigma_x + sigma_y + c2)
+    )
+    return ssim_map.mean()
 
 
 def contextual_loss(x, x_hat):
@@ -8,7 +36,9 @@ def contextual_loss(x, x_hat):
     mismatch (edges, texture) rather than raw pixel intensity — more
     appropriate for retinal images than L1/L2, since two fundus images
     can differ in brightness but be structurally identical."""
-    return 1 - ssim(x, x_hat, data_range=2.0, size_average=True)  # images are in [-1, 1] -> range 2.0
+    if _ssim is not None:
+        return 1 - _ssim(x, x_hat, data_range=2.0, size_average=True)
+    return 1 - _native_ssim(x, x_hat, data_range=2.0)
 
 
 def encoder_loss(z, z_hat):
@@ -38,7 +68,6 @@ def gradient_penalty(discriminator, real, fake, device):
         inputs=interp,
         grad_outputs=torch.ones_like(score),
         create_graph=True,
-        retain_graph=True,
     )[0]
     grads = grads.view(grads.size(0), -1)
     return ((grads.norm(2, dim=1) - 1) ** 2).mean()
